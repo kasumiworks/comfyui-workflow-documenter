@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ComfyUI Workflow Documenter — free, 100% local</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c2330; --border: #30363d;
+    --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff; --accent2: #bc8cff;
+    --good: #3fb950; --warn: #d29922; --bad: #f85149;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6; min-height: 100vh;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
+  header h1 {
+    font-size: 1.9rem; letter-spacing: -0.5px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    display: inline-block;
+  }
+  header p.tagline { color: var(--muted); margin-top: 4px; }
+  .privacy {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+    font-size: 0.8rem; color: var(--good); border: 1px solid #2ea04366;
+    border-radius: 999px; padding: 2px 12px; background: #2ea04314;
+  }
+  #dropzone {
+    margin-top: 24px; border: 2px dashed var(--border); border-radius: 12px;
+    padding: 44px 20px; text-align: center; cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  #dropzone:hover, #dropzone.drag { border-color: var(--accent); background: #58a6ff0d; }
+  #dropzone .big { font-size: 1.1rem; font-weight: 600; }
+  #dropzone .hint { color: var(--muted); font-size: 0.85rem; margin-top: 6px; }
+  #fileinput { display: none; }
+  .row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+  textarea#pastearea {
+    flex: 1 1 100%; min-height: 70px; background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+    font-family: ui-monospace, Consolas, monospace; font-size: 0.8rem; resize: vertical;
+  }
+  button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 16px; font-size: 0.9rem; cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  button:hover { border-color: var(--accent); background: #58a6ff14; }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; font-weight: 600; }
+  button.primary:hover { background: #388bfd; }
+  #error {
+    display: none; margin-top: 16px; border: 1px solid #f8514966; background: #f8514914;
+    color: var(--bad); border-radius: 8px; padding: 12px 16px; font-size: 0.9rem;
+  }
+  #results { display: none; margin-top: 28px; }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .fname { color: var(--muted); font-size: 0.85rem; font-family: ui-monospace, Consolas, monospace; }
+  .doc {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 28px 32px;
+  }
+  .doc h2 {
+    font-size: 1.05rem; margin: 26px 0 10px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--border); color: var(--accent);
+  }
+  .doc h2:first-child { margin-top: 0; }
+  .doc h1.docname { font-size: 1.35rem; margin-bottom: 2px; }
+  .doc .sub { color: var(--muted); font-size: 0.85rem; }
+  .doc table { border-collapse: collapse; width: 100%; font-size: 0.87rem; margin: 8px 0; }
+  .doc th, .doc td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+  .doc th { background: var(--panel2); font-weight: 600; }
+  .doc td.mono, .doc span.mono { font-family: ui-monospace, Consolas, monospace; font-size: 0.82rem; }
+  .doc pre {
+    background: #0d1117; border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; font-size: 0.82rem; overflow-x: auto; white-space: pre-wrap;
+    word-break: break-word; margin: 6px 0 12px; font-family: ui-monospace, Consolas, monospace;
+  }
+  .doc .pill {
+    display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 0.75rem;
+    border: 1px solid var(--border); margin-right: 6px;
+  }
+  .pill.good { color: var(--good); border-color: #2ea04366; background: #2ea04314; }
+  .pill.warn { color: var(--warn); border-color: #d2992266; background: #d2992214; }
+  .doc .pipeline {
+    font-family: ui-monospace, Consolas, monospace; font-size: 0.82rem;
+    background: #0d1117; border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; overflow-x: auto; margin: 6px 0 12px;
+  }
+  .doc .pipeline .arrow { color: var(--accent2); }
+  .scrollbox { overflow-x: auto; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 0.8rem; text-align: center; }
+  footer a { color: var(--accent); text-decoration: none; }
+  @media (max-width: 640px) { .doc { padding: 20px 16px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>ComfyUI Workflow Documenter</h1>
+    <p class="tagline">Drop a workflow — get clean, human-readable documentation. Free forever.</p>
+    <div class="privacy">&#128274; 100% local — your files never leave your browser. No upload, no account.</div>
+  </header>
+
+  <div id="dropzone">
+    <div class="big">Drop a workflow <span class="mono">.json</span> or a ComfyUI <span class="mono">.png</span> here</div>
+    <div class="hint">Supports UI-export and API-format JSON, and PNGs with embedded workflow metadata &middot; or click to browse</div>
+  </div>
+  <input type="file" id="fileinput" accept=".json,image/png">
+
+  <div class="row">
+    <textarea id="pastearea" placeholder="…or paste workflow JSON here"></textarea>
+    <button class="primary" id="parsebtn">Generate docs from pasted JSON</button>
+    <button id="samplebtn">Try a sample workflow</button>
+  </div>
+
+  <div id="error"></div>
+
+  <div id="results">
+    <div class="toolbar">
+      <button class="primary" id="copybtn">&#128203; Copy Markdown</button>
+      <button id="dlbtn">&#11015; Download .md</button>
+      <span class="spacer"></span>
+      <span class="fname" id="fname"></span>
+    </div>
+    <div class="doc" id="doc"></div>
+  </div>
+
+  <footer>
+    A free tool by <a href="https://kasumiworks.gumroad.com" target="_blank" rel="noopener">Kasumi Works</a>
+    &middot; docs stay yours, use them in your READMEs, product pages, anywhere.
+  </footer>
+</div>
+
+<script id="wfdoc-core">
+"use strict";
+const WFDoc = (() => {
+
+  // ---- knowledge tables -------------------------------------------------
+  const CORE_NODES = new Set([
+    "KSampler","KSamplerAdvanced","SamplerCustom","SamplerCustomAdvanced","KSamplerSelect",
+    "CheckpointLoaderSimple","CheckpointLoader","UNETLoader","VAELoader","LoraLoader",
+    "LoraLoaderModelOnly","CLIPLoader","DualCLIPLoader","TripleCLIPLoader","QuadrupleCLIPLoader",
+    "ControlNetLoader","DiffControlNetLoader","UpscaleModelLoader","StyleModelLoader",
+    "CLIPVisionLoader","GLIGENLoader","ImageOnlyCheckpointLoader",
+    "CLIPTextEncode","CLIPTextEncodeSDXL","CLIPTextEncodeSDXLRefiner","CLIPSetLastLayer",
+    "ConditioningCombine","ConditioningAverage","ConditioningConcat","ConditioningSetArea",
+    "ConditioningSetAreaPercentage","ConditioningSetMask","ConditioningZeroOut",
+    "ConditioningSetTimestepRange","ControlNetApply","ControlNetApplyAdvanced",
+    "ControlNetApplySD3","StyleModelApply","GLIGENTextBoxApply","CLIPVisionEncode",
+    "unCLIPConditioning","InpaintModelConditioning","FluxGuidance","FluxKontextImageScale",
+    "EmptyLatentImage","EmptySD3LatentImage","EmptyLatentAudio","EmptyMochiLatentVideo",
+    "EmptyHunyuanLatentVideo","EmptyLTXVLatentVideo","EmptyCosmosLatentVideo",
+    "LatentUpscale","LatentUpscaleBy","LatentFromBatch","RepeatLatentBatch","LatentComposite",
+    "LatentBlend","LatentRotate","LatentFlip","LatentCrop","SetLatentNoiseMask","LatentBatch",
+    "VAEDecode","VAEEncode","VAEEncodeForInpaint","VAEDecodeTiled","VAEEncodeTiled",
+    "VAEDecodeAudio","VAEEncodeAudio",
+    "SaveImage","PreviewImage","LoadImage","LoadImageMask","ImageScale","ImageScaleBy",
+    "ImageInvert","ImageBatch","ImagePadForOutpaint","ImageCompositeMasked","ImageCrop",
+    "ImageBlend","ImageBlur","ImageQuantize","ImageSharpen","ImageScaleToTotalPixels",
+    "ImageUpscaleWithModel","SaveAnimatedWEBP","SaveAnimatedPNG","SaveWEBM","SaveVideo",
+    "SaveAudio","LoadAudio","PreviewAudio","LoadVideo",
+    "MaskToImage","ImageToMask","SolidMask","InvertMask","CropMask","MaskComposite",
+    "FeatherMask","GrowMask","ImageColorToMask",
+    "BasicScheduler","KarrasScheduler","ExponentialScheduler","PolyexponentialScheduler",
+    "SDTurboScheduler","BetaSamplingScheduler","AlignYourStepsScheduler","GITSScheduler",
+    "LaplaceScheduler","RandomNoise","DisableNoise","BasicGuider","CFGGuider","DualCFGGuider",
+    "SplitSigmas","SplitSigmasDenoise","FlipSigmas","SetFirstSigma",
+    "ModelSamplingDiscrete","ModelSamplingContinuousEDM","ModelSamplingContinuousV",
+    "ModelSamplingStableCascade","ModelSamplingSD3","ModelSamplingAuraFlow","ModelSamplingFlux",
+    "ModelSamplingLTXV","RescaleCFG","PatchModelAddDownscale","FreeU","FreeU_V2",
+    "PerturbedAttentionGuidance","SelfAttentionGuidance","TomePatchModel","CFGZeroStar",
+    "DifferentialDiffusion","ModelMergeSimple","ModelMergeBlocks","ModelMergeSubtract",
+    "ModelMergeAdd","CheckpointSave","CLIPMergeSimple","CLIPSave","VAESave",
+    "TorchCompileModel","LoadLatent","SaveLatent",
+    "Note","MarkdownNote","PrimitiveNode","PrimitiveInt","PrimitiveFloat","PrimitiveString",
+    "PrimitiveStringMultiline","PrimitiveBoolean","Reroute","GetImageSize",
+    "DifferentialDiffusion","ThresholdMask","PorterDuffImageComposite","JoinImageWithAlpha",
+    "SplitImageWithAlpha","SD_4XUpscale_Conditioning","PhotoMakerLoader","PhotoMakerEncode",
+    "VideoLinearCFGGuidance","VideoTriangleCFGGuidance","SVD_img2vid_Conditioning",
+    "StableZero123_Conditioning","SV3D_Conditioning","WebcamCapture","LoadImageOutput"
+  ]);
+
+  // widget name maps for UI-format workflows (widgets_values is a bare array)
+  const WIDGET_NAME_MAP = {
+    CheckpointLoaderSimple: ["ckpt_name"],
+    ImageOnlyCheckpointLoader: ["ckpt_name"],
+    UNETLoader: ["unet_name","weight_dtype"],
+    VAELoader: ["vae_name"],
+    LoraLoader: ["lora_name","strength_model","strength_clip"],
+    LoraLoaderModelOnly: ["lora_name","strength_model"],
+    CLIPLoader: ["clip_name","type"],
+    DualCLIPLoader: ["clip_name1","clip_name2","type"],
+    TripleCLIPLoader: ["clip_name1","clip_name2","clip_name3"],
+    ControlNetLoader: ["control_net_name"],
+    UpscaleModelLoader: ["model_name"],
+    StyleModelLoader: ["style_model_name"],
+    CLIPVisionLoader: ["clip_name"],
+    CLIPTextEncode: ["text"],
+    CLIPSetLastLayer: ["stop_at_clip_layer"],
+    EmptyLatentImage: ["width","height","batch_size"],
+    EmptySD3LatentImage: ["width","height","batch_size"],
+    EmptyHunyuanLatentVideo: ["width","height","length","batch_size"],
+    EmptyLTXVLatentVideo: ["width","height","length","batch_size"],
+    KSampler: ["seed","control_after_generate","steps","cfg","sampler_name","scheduler","denoise"],
+    KSamplerAdvanced: ["add_noise","noise_seed","control_after_generate","steps","cfg",
+                       "sampler_name","scheduler","start_at_step","end_at_step","return_with_leftover_noise"],
+    KSamplerSelect: ["sampler_name"],
+    BasicScheduler: ["scheduler","steps","denoise"],
+    RandomNoise: ["noise_seed","control_after_generate"],
+    FluxGuidance: ["guidance"],
+    SaveImage: ["filename_prefix"],
+    SaveAnimatedWEBP: ["filename_prefix","fps","lossless","quality","method"],
+    LatentUpscale: ["upscale_method","width","height","crop"],
+    LatentUpscaleBy: ["upscale_method","scale_by"],
+    ImageScale: ["upscale_method","width","height","crop"],
+    ImageScaleBy: ["upscale_method","scale_by"],
+    ControlNetApplyAdvanced: ["strength","start_percent","end_percent"],
+    ControlNetApply: ["strength"],
+    LoadImage: ["image","upload"],
+    Note: ["text"],
+    MarkdownNote: ["text"]
+  };
+
+  const ASSET_KEYS = {
+    ckpt_name: "Checkpoint",
+    unet_name: "Diffusion Model (UNet)",
+    lora_name: "LoRA",
+    vae_name: "VAE",
+    control_net_name: "ControlNet",
+    clip_name: "Text Encoder (CLIP)",
+    clip_name1: "Text Encoder (CLIP)",
+    clip_name2: "Text Encoder (CLIP)",
+    clip_name3: "Text Encoder (CLIP)",
+    style_model_name: "Style Model",
+    model_name: "Model"
+  };
+  const MODEL_EXT_RE = /\.(safetensors|ckpt|pt|pth|gguf|sft|onnx|bin)$/i;
+  const SAMPLER_TYPES = /^(KSampler|KSamplerAdvanced|SamplerCustom|SamplerCustomAdvanced)$/;
+  const OUTPUT_RE = /save|preview|videocombine/i;
+  const NEG_HINT_RE = /worst quality|low quality|bad anatomy|lowres|bad hands|watermark|jpeg artifacts|deformed/i;
+
+  // ---- normalization ----------------------------------------------------
+  // unified node: { id, type, title, widgets: [{name,value}], conns: [{input, fromId}], pack }
+  function detectFormat(j) {
+    if (j && Array.isArray(j.nodes)) return "ui";
+    if (j && typeof j === "object") {
+      const vals = Object.values(j).filter(v => v && typeof v === "object");
+      if (vals.length && vals.every(v => typeof v.class_type === "string")) return "api";
+    }
+    return null;
+  }
+
+  function normalize(json) {
+    let j = json;
+    // some exports wrap the API prompt: {"prompt": {...}} or {"workflow": {...}}
+    if (j && !detectFormat(j)) {
+      if (j.prompt && detectFormat(j.prompt)) j = j.prompt;
+      else if (j.workflow && detectFormat(j.workflow)) j = j.workflow;
+    }
+    const format = detectFormat(j);
+    if (!format) throw new Error("This JSON doesn't look like a ComfyUI workflow (neither UI-export nor API format).");
+
+    const nodes = [];
+    if (format === "api") {
+      for (const [id, n] of Object.entries(j)) {
+        if (!n || typeof n !== "object" || !n.class_type) continue;
+        const widgets = [], conns = [];
+        for (const [k, v] of Object.entries(n.inputs || {})) {
+          if (Array.isArray(v) && v.length === 2 && (typeof v[0] === "string" || typeof v[0] === "number")) {
+            conns.push({ input: k, fromId: String(v[0]) });
+          } else {
+            widgets.push({ name: k, value: v });
+          }
+        }
+        nodes.push({ id: String(id), type: n.class_type, title: n._meta?.title || null, widgets, conns, pack: null });
+      }
+    } else {
+      const linkSrc = {}; // linkId -> fromNodeId
+      for (const l of j.links || []) {
+        if (Array.isArray(l) && l.length >= 4) linkSrc[String(l[0])] = String(l[1]);
+        else if (l && typeof l === "object" && l.id != null) linkSrc[String(l.id)] = String(l.origin_id);
+      }
+      for (const n of j.nodes) {
+        if (!n || typeof n !== "object") continue;
+        const type = n.type || "Unknown";
+        const widgets = [];
+        const wv = n.widgets_values;
+        if (Array.isArray(wv)) {
+          const names = WIDGET_NAME_MAP[type] || [];
+          wv.forEach((v, i) => widgets.push({ name: names[i] || ("value_" + (i + 1)), value: v }));
+        } else if (wv && typeof wv === "object") {
+          for (const [k, v] of Object.entries(wv)) widgets.push({ name: k, value: v });
+        }
+        const conns = [];
+        for (const inp of n.inputs || []) {
+          if (inp && inp.link != null && linkSrc[String(inp.link)] != null) {
+            conns.push({ input: inp.name || "?", fromId: linkSrc[String(inp.link)] });
+          }
+        }
+        let pack = null;
+        const cnr = n.properties && (n.properties.cnr_id || n.properties.aux_id);
+        if (cnr && cnr !== "comfy-core") pack = String(cnr);
+        nodes.push({ id: String(n.id), type, title: n.title || null, widgets, conns, pack });
+      }
+    }
+    return { format, nodes };
+  }
+
+  // ---- analysis helpers ---------------------------------------------------
+  const byIdMap = nodes => Object.fromEntries(nodes.map(n => [n.id, n]));
+  const disp = n => n.title ? (n.title + " (" + n.type + ")") : n.type;
+  const widget = (n, name) => { const w = n.widgets.find(w => w.name === name); return w ? w.value : undefined; };
+
+  function traceText(byId, startId, visited) {
+    visited = visited || new Set();
+    if (visited.has(startId) || visited.size > 40) return null;
+    visited.add(startId);
+    const n = byId[startId];
+    if (!n) return null;
+    if (/CLIPTextEncode/i.test(n.type)) {
+      const t = widget(n, "text");
+      return { nodeId: n.id, text: (typeof t === "string") ? t : "(text comes from a connected input)" };
+    }
+    for (const c of n.conns) {
+      const r = traceText(byId, c.fromId, visited);
+      if (r) return r;
+    }
+    return null;
+  }
+
+  function isCustom(n) {
+    if (n.pack) return true;
+    if (n.pack === null && CORE_NODES.has(n.type)) return false;
+    return !CORE_NODES.has(n.type);
+  }
+
+  function stageOf(n) {
+    const t = n.type;
+    if (OUTPUT_RE.test(t)) return "Output";
+    if (/loader|^load/i.test(t)) return "Loaders";
+    if (SAMPLER_TYPES.test(t) || /sampler|sigmas|noise|scheduler|guider/i.test(t)) return "Sampling";
+    if (/clip|conditioning|controlnet|guidance|gligen|style/i.test(t)) return "Conditioning";
+    if (/latent|vae/i.test(t)) return "Latent / VAE";
+    if (/image|mask|upscale/i.test(t)) return "Image processing";
+    if (/^note$|markdownnote/i.test(t)) return "Notes";
+    return "Other";
+  }
+
+  // ---- main analysis ------------------------------------------------------
+  function analyze(json, filename) {
+    const { format, nodes } = normalize(json);
+    const byId = byIdMap(nodes);
+
+    // custom node packs
+    const customTypes = {};
+    for (const n of nodes) {
+      if (isCustom(n)) {
+        const pack = n.pack || "(unrecognized — likely a custom node pack)";
+        (customTypes[pack] = customTypes[pack] || new Set()).add(n.type);
+      }
+    }
+    const customPacks = Object.entries(customTypes)
+      .map(([pack, types]) => ({ pack, types: [...types].sort() }));
+
+    // model file assets
+    const assetMap = {};
+    for (const n of nodes) {
+      for (const w of n.widgets) {
+        if (typeof w.value !== "string") continue;
+        let cat = ASSET_KEYS[w.name];
+        if (cat === "Model" && /upscale/i.test(n.type)) cat = "Upscale Model";
+        if (!cat && MODEL_EXT_RE.test(w.value)) cat = "Model File";
+        if (!cat) continue;
+        if (!MODEL_EXT_RE.test(w.value) && !/[/\\]/.test(w.value)) {
+          // asset keys usually hold filenames; skip obvious non-files for generic case
+          if (!ASSET_KEYS[w.name]) continue;
+        }
+        const key = cat + "|" + w.value;
+        const notes = [];
+        if (w.name === "lora_name") {
+          const sm = widget(n, "strength_model"), sc = widget(n, "strength_clip");
+          if (sm !== undefined) notes.push("strength " + sm + (sc !== undefined && sc !== sm ? " / clip " + sc : ""));
+        }
+        if (!assetMap[key]) assetMap[key] = { category: cat, file: w.value, notes: new Set(), nodes: new Set() };
+        notes.forEach(x => assetMap[key].notes.add(x));
+        assetMap[key].nodes.add(disp(n));
+      }
+    }
+    const catOrder = ["Checkpoint","Diffusion Model (UNet)","LoRA","VAE","Text Encoder (CLIP)","ControlNet","Upscale Model","Style Model","Model","Model File"];
+    const assets = Object.values(assetMap).sort((a, b) =>
+      (catOrder.indexOf(a.category) - catOrder.indexOf(b.category)) || a.file.localeCompare(b.file))
+      .map(a => ({ category: a.category, file: a.file, notes: [...a.notes].join(", "), nodes: [...a.nodes].join(", ") }));
+
+    // resolution / latent
+    let resolution = null;
+    const latentNode = nodes.find(n => /^Empty.*Latent/i.test(n.type) && widget(n, "width") !== undefined)
+                    || nodes.find(n => widget(n, "width") !== undefined && widget(n, "height") !== undefined);
+    if (latentNode) {
+      const w = widget(latentNode, "width"), h = widget(latentNode, "height");
+      if (typeof w === "number" && typeof h === "number") {
+        const orient = w === h ? "square" : (w < h ? "portrait" : "landscape");
+        resolution = { w, h, orient, batch: widget(latentNode, "batch_size"), length: widget(latentNode, "length") };
+      }
+    }
+
+    // samplers + settings
+    const samplerNodes = nodes.filter(n => SAMPLER_TYPES.test(n.type));
+    const samplers = samplerNodes.map(n => {
+      const s = {};
+      for (const k of ["steps","cfg","sampler_name","scheduler","denoise","seed","noise_seed","add_noise","start_at_step","end_at_step","guidance"]) {
+        const v = widget(n, k);
+        if (v !== undefined) s[k] = v;
+      }
+      return { nodeId: n.id, name: disp(n), settings: s };
+    });
+    // aux settings scattered across custom-sampling nodes
+    const aux = {};
+    for (const n of nodes) {
+      if (n.type === "BasicScheduler") { aux.scheduler = widget(n, "scheduler"); aux.steps = widget(n, "steps"); aux.denoise = widget(n, "denoise"); }
+      if (n.type === "KSamplerSelect") { aux.sampler_name = widget(n, "sampler_name"); }
+      if (n.type === "RandomNoise")    { aux.seed = widget(n, "noise_seed"); }
+      if (n.type === "FluxGuidance")   { aux.guidance = widget(n, "guidance"); }
+    }
+
+    // prompts: trace from samplers / guiders
+    const posSet = new Map(), negSet = new Map();
+    function collectFrom(n) {
+      for (const c of n.conns) {
+        if (c.input === "positive" || c.input === "conditioning") {
+          const r = traceText(byId, c.fromId); if (r) posSet.set(r.nodeId, r.text);
+        } else if (c.input === "negative") {
+          const r = traceText(byId, c.fromId); if (r) negSet.set(r.nodeId, r.text);
+        } else if (c.input === "guider") {
+          const g = byId[c.fromId]; if (g) collectFrom(g);
+        }
+      }
+    }
+    samplerNodes.forEach(collectFrom);
+    // fallback: no sampler found — classify all text encodes by heuristic
+    if (!posSet.size && !negSet.size) {
+      for (const n of nodes.filter(n => /CLIPTextEncode/i.test(n.type))) {
+        const t = widget(n, "text");
+        if (typeof t !== "string") continue;
+        (NEG_HINT_RE.test(t) ? negSet : posSet).set(n.id, t);
+      }
+    }
+    const prompts = { positive: [...posSet.values()], negative: [...negSet.values()] };
+
+    // pipeline main path (walk back from first output node)
+    const outputs = nodes.filter(n => OUTPUT_RE.test(n.type));
+    let pipeline = [];
+    if (outputs.length) {
+      const pref = ["images","image","samples","model","latent_image","pixels","conditioning"];
+      let cur = outputs[0]; const seen = new Set([cur.id]); const chain = [cur];
+      for (let i = 0; i < 24 && cur; i++) {
+        const conns = cur.conns;
+        if (!conns.length) break;
+        let next = null;
+        for (const p of pref) { const c = conns.find(c => c.input === p && !seen.has(c.fromId)); if (c) { next = byId[c.fromId]; break; } }
+        if (!next) { const c = conns.find(c => !seen.has(c.fromId)); next = c ? byId[c.fromId] : null; }
+        if (!next) break;
+        seen.add(next.id); chain.push(next); cur = next;
+      }
+      pipeline = chain.reverse().map(disp);
+    }
+
+    // stage counts
+    const stageCounts = {};
+    for (const n of nodes) { const s = stageOf(n); stageCounts[s] = (stageCounts[s] || 0) + 1; }
+
+    // author notes
+    const notes = nodes.filter(n => /^Note$|MarkdownNote/i.test(n.type))
+      .map(n => widget(n, "text")).filter(t => typeof t === "string" && t.trim());
+
+    // output info
+    const outputInfo = outputs.map(n => {
+      const p = widget(n, "filename_prefix");
+      return disp(n) + (p ? ` (prefix: ${p})` : "");
+    });
+
+    const customCount = nodes.filter(isCustom).length;
+    return {
+      filename: filename || "workflow", format, nodes, byId,
+      counts: { total: nodes.length, core: nodes.length - customCount, custom: customCount },
+      customPacks, assets, resolution, samplers, aux, prompts, pipeline, stageCounts, notes, outputInfo
+    };
+  }
+
+  // ---- markdown output ----------------------------------------------------
+  const mdEsc = s => String(s).replace(/\|/g, "\\|").replace(/\n/g, " ");
+  const fence = s => "```\n" + String(s).replace(/```/g, "ʼʼʼ") + "\n```";
+
+  function settingsRows(a) {
+    const rows = [];
+    if (a.resolution) {
+      const r = a.resolution;
+      rows.push(["Resolution", `${r.w} × ${r.h} (${r.orient})`]);
+      if (r.length) rows.push(["Frames", String(r.length)]);
+      if (r.batch !== undefined) rows.push(["Batch size", String(r.batch)]);
+    }
+    const one = a.samplers.length === 1 ? a.samplers[0].settings : null;
+    const merged = Object.assign({}, a.aux, one || {});
+    const label = { steps: "Steps", cfg: "CFG", sampler_name: "Sampler", scheduler: "Scheduler", denoise: "Denoise", seed: "Seed", noise_seed: "Seed (noise)", guidance: "Guidance" };
+    for (const [k, lab] of Object.entries(label)) {
+      if (merged[k] !== undefined) rows.push([lab, String(merged[k])]);
+    }
+    return rows;
+  }
+
+  function toMarkdown(a) {
+    const L = [];
+    L.push(`# ${a.filename} — Workflow Documentation`);
+    L.push("");
+    L.push(`> Auto-generated by **ComfyUI Workflow Documenter** (free, runs 100% in your browser) — a [Kasumi Works](https://kasumiworks.gumroad.com) tool.`);
+    L.push("");
+    L.push("## Overview");
+    L.push(`- **Format:** ${a.format === "api" ? "API (prompt) format" : "UI export format"}`);
+    L.push(`- **Nodes:** ${a.counts.total} total — ${a.counts.core} core, ${a.counts.custom} custom`);
+    if (a.outputInfo.length) L.push(`- **Output:** ${a.outputInfo.join("; ")}`);
+    const stages = Object.entries(a.stageCounts).map(([k, v]) => `${k} ${v}`).join(" · ");
+    if (stages) L.push(`- **Node mix:** ${stages}`);
+    L.push("");
+
+    L.push("## Requirements");
+    L.push("");
+    L.push("### Custom node packs");
+    if (!a.customPacks.length) {
+      L.push("✅ **None — this workflow uses 100% ComfyUI core nodes.** It runs on a clean install.");
+    } else {
+      L.push("Install these via ComfyUI Manager before loading:");
+      L.push("");
+      for (const p of a.customPacks) L.push(`- **${p.pack}** — nodes used: ${p.types.map(t => "`" + t + "`").join(", ")}`);
+    }
+    L.push("");
+    L.push("### Model files");
+    if (!a.assets.length) {
+      L.push("_No model files detected in widget values._");
+    } else {
+      L.push("| Type | File | Notes | Used by |");
+      L.push("|---|---|---|---|");
+      for (const x of a.assets) L.push(`| ${x.category} | \`${mdEsc(x.file)}\` | ${mdEsc(x.notes || "—")} | ${mdEsc(x.nodes)} |`);
+    }
+    L.push("");
+
+    const rows = settingsRows(a);
+    if (rows.length || a.samplers.length > 1) {
+      L.push("## Generation settings");
+      if (rows.length) {
+        L.push("| Setting | Value |");
+        L.push("|---|---|");
+        for (const [k, v] of rows) L.push(`| ${k} | ${mdEsc(v)} |`);
+        L.push("");
+      }
+      if (a.samplers.length > 1) {
+        L.push("This workflow has multiple sampling passes:");
+        L.push("");
+        L.push("| Sampler node | Steps | CFG | Sampler | Scheduler | Denoise | Seed |");
+        L.push("|---|---|---|---|---|---|---|");
+        for (const s of a.samplers) {
+          const g = k => s.settings[k] !== undefined ? String(s.settings[k]) : "—";
+          L.push(`| ${mdEsc(s.name)} | ${g("steps")} | ${g("cfg")} | ${g("sampler_name")} | ${g("scheduler")} | ${g("denoise")} | ${s.settings.seed !== undefined ? s.settings.seed : g("noise_seed")} |`);
+        }
+        L.push("");
+      }
+    }
+
+    if (a.prompts.positive.length || a.prompts.negative.length) {
+      L.push("## Prompts");
+      a.prompts.positive.forEach((t, i) => {
+        L.push(`**Positive${a.prompts.positive.length > 1 ? " " + (i + 1) : ""}:**`);
+        L.push(fence(t)); L.push("");
+      });
+      a.prompts.negative.forEach((t, i) => {
+        L.push(`**Negative${a.prompts.negative.length > 1 ? " " + (i + 1) : ""}:**`);
+        L.push(fence(t)); L.push("");
+      });
+    }
+
+    if (a.pipeline.length > 1) {
+      L.push("## Pipeline (main path)");
+      L.push("");
+      L.push("`" + a.pipeline.join("` → `") + "`");
+      L.push("");
+    }
+
+    if (a.notes.length) {
+      L.push("## Author notes (from the workflow)");
+      a.notes.forEach(t => { L.push(""); L.push("> " + t.replace(/\n/g, "\n> ")); });
+      L.push("");
+    }
+
+    L.push("## Node reference");
+    L.push("");
+    L.push("| # | Node | Key settings |");
+    L.push("|---|---|---|");
+    for (const n of a.nodes) {
+      if (/^Note$|MarkdownNote|Reroute/i.test(n.type)) continue;
+      const ws = n.widgets
+        .filter(w => w.value !== undefined && w.value !== null && String(w.value) !== "")
+        .map(w => `${w.name}: ${String(w.value).length > 60 ? String(w.value).slice(0, 60) + "…" : w.value}`)
+        .join("; ");
+      L.push(`| ${n.id} | ${mdEsc(disp(n))}${isCustom(n) ? " ⚠️custom" : ""} | ${mdEsc(ws || "—")} |`);
+    }
+    L.push("");
+    L.push("---");
+    L.push("_Generated locally — no data was uploaded anywhere. Tool: ComfyUI Workflow Documenter by Kasumi Works._");
+    return L.join("\n");
+  }
+
+  function parseAny(text, filename) {
+    let j;
+    try { j = JSON.parse(text); }
+    catch (e) { throw new Error("Not valid JSON: " + e.message); }
+    return analyze(j, filename);
+  }
+
+  return { analyze, toMarkdown, parseAny, isCustom, disp, settingsRows };
+})();
+if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
+</script>
+
+<script id="wfdoc-ui">
+"use strict";
+(() => {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  let currentMd = "", currentName = "workflow";
+
+  function showError(msg) {
+    const e = $("error"); e.textContent = "⚠ " + msg; e.style.display = "block";
+    $("results").style.display = "none";
+  }
+
+  function renderHTML(a) {
+    const H = [];
+    H.push(`<h1 class="docname">${esc(a.filename)}</h1>`);
+    H.push(`<div class="sub">Workflow documentation · generated locally in your browser</div>`);
+
+    H.push(`<h2>Overview</h2>`);
+    const fmt = a.format === "api" ? "API (prompt) format" : "UI export format";
+    H.push(`<p><span class="pill">${fmt}</span><span class="pill">${a.counts.total} nodes</span>` +
+      (a.counts.custom === 0
+        ? `<span class="pill good">100% core nodes ✓</span>`
+        : `<span class="pill warn">${a.counts.custom} custom node${a.counts.custom > 1 ? "s" : ""}</span>`) + `</p>`);
+    if (a.outputInfo.length) H.push(`<p><strong>Output:</strong> ${esc(a.outputInfo.join("; "))}</p>`);
+
+    H.push(`<h2>Requirements</h2>`);
+    if (!a.customPacks.length) {
+      H.push(`<p>✅ <strong>No custom nodes needed</strong> — runs on a clean ComfyUI install.</p>`);
+    } else {
+      H.push(`<p>Install these custom node packs (via ComfyUI Manager) before loading:</p><ul>`);
+      for (const p of a.customPacks)
+        H.push(`<li><strong>${esc(p.pack)}</strong> — <span class="mono">${p.types.map(esc).join(", ")}</span></li>`);
+      H.push(`</ul>`);
+    }
+    if (a.assets.length) {
+      H.push(`<div class="scrollbox"><table><tr><th>Type</th><th>File</th><th>Notes</th><th>Used by</th></tr>`);
+      for (const x of a.assets)
+        H.push(`<tr><td>${esc(x.category)}</td><td class="mono">${esc(x.file)}</td><td>${esc(x.notes || "—")}</td><td>${esc(x.nodes)}</td></tr>`);
+      H.push(`</table></div>`);
+    }
+
+    const rows = WFDoc.settingsRows(a);
+    if (rows.length || a.samplers.length > 1) {
+      H.push(`<h2>Generation settings</h2>`);
+      if (rows.length) {
+        H.push(`<div class="scrollbox"><table><tr><th>Setting</th><th>Value</th></tr>`);
+        for (const [k, v] of rows) H.push(`<tr><td>${esc(k)}</td><td class="mono">${esc(v)}</td></tr>`);
+        H.push(`</table></div>`);
+      }
+      if (a.samplers.length > 1) {
+        H.push(`<p>Multiple sampling passes:</p><div class="scrollbox"><table><tr><th>Sampler node</th><th>Steps</th><th>CFG</th><th>Sampler</th><th>Scheduler</th><th>Denoise</th></tr>`);
+        for (const s of a.samplers) {
+          const g = k => s.settings[k] !== undefined ? esc(String(s.settings[k])) : "—";
+          H.push(`<tr><td>${esc(s.name)}</td><td>${g("steps")}</td><td>${g("cfg")}</td><td>${g("sampler_name")}</td><td>${g("scheduler")}</td><td>${g("denoise")}</td></tr>`);
+        }
+        H.push(`</table></div>`);
+      }
+    }
+
+    if (a.prompts.positive.length || a.prompts.negative.length) {
+      H.push(`<h2>Prompts</h2>`);
+      a.prompts.positive.forEach((t, i) =>
+        H.push(`<p><strong>Positive${a.prompts.positive.length > 1 ? " " + (i + 1) : ""}</strong></p><pre>${esc(t)}</pre>`));
+      a.prompts.negative.forEach((t, i) =>
+        H.push(`<p><strong>Negative${a.prompts.negative.length > 1 ? " " + (i + 1) : ""}</strong></p><pre>${esc(t)}</pre>`));
+    }
+
+    if (a.pipeline.length > 1) {
+      H.push(`<h2>Pipeline (main path)</h2>`);
+      H.push(`<div class="pipeline">${a.pipeline.map(esc).join(` <span class="arrow">→</span> `)}</div>`);
+    }
+
+    if (a.notes.length) {
+      H.push(`<h2>Author notes</h2>`);
+      a.notes.forEach(t => H.push(`<pre>${esc(t)}</pre>`));
+    }
+
+    H.push(`<h2>Node reference</h2>`);
+    H.push(`<div class="scrollbox"><table><tr><th>#</th><th>Node</th><th>Key settings</th></tr>`);
+    for (const n of a.nodes) {
+      if (/^Note$|MarkdownNote|Reroute/i.test(n.type)) continue;
+      const ws = n.widgets
+        .filter(w => w.value !== undefined && w.value !== null && String(w.value) !== "")
+        .map(w => `${w.name}: ${String(w.value).length > 60 ? String(w.value).slice(0, 60) + "…" : w.value}`).join("; ");
+      H.push(`<tr><td>${esc(n.id)}</td><td>${esc(WFDoc.disp(n))}${WFDoc.isCustom(n) ? ' <span class="pill warn">custom</span>' : ""}</td><td class="mono">${esc(ws || "—")}</td></tr>`);
+    }
+    H.push(`</table></div>`);
+    return H.join("\n");
+  }
+
+  function present(text, filename) {
+    $("error").style.display = "none";
+    let a;
+    try { a = WFDoc.parseAny(text, filename); }
+    catch (e) { showError(e.message); return; }
+    currentMd = WFDoc.toMarkdown(a);
+    currentName = (filename || "workflow").replace(/\.(json|png)$/i, "");
+    $("doc").innerHTML = renderHTML(a);
+    $("fname").textContent = filename || "(pasted JSON)";
+    $("results").style.display = "block";
+    $("results").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // ---- PNG metadata extraction -------------------------------------------
+  function extractPngWorkflow(buf) {
+    const dv = new DataView(buf);
+    const sig = [137, 80, 78, 71, 13, 10, 26, 10];
+    for (let i = 0; i < 8; i++) if (dv.getUint8(i) !== sig[i]) throw new Error("Not a valid PNG file.");
+    const texts = {};
+    let off = 8;
+    const ascii = (o, len) => { let s = ""; for (let i = 0; i < len; i++) s += String.fromCharCode(dv.getUint8(o + i)); return s; };
+    while (off + 12 <= dv.byteLength) {
+      const len = dv.getUint32(off);
+      const type = ascii(off + 4, 4);
+      if (type === "tEXt" || type === "iTXt") {
+        const data = new Uint8Array(buf, off + 8, len);
+        let z = data.indexOf(0);
+        if (z > 0) {
+          const key = new TextDecoder("latin1").decode(data.subarray(0, z));
+          let body = null;
+          if (type === "tEXt") {
+            body = new TextDecoder("utf-8").decode(data.subarray(z + 1));
+          } else {
+            // iTXt: keyword \0 compFlag(1) compMethod(1) \0-terminated lang \0-terminated translated, then text
+            const compFlag = data[z + 1];
+            let p = z + 3;
+            while (p < data.length && data[p] !== 0) p++; p++;       // language tag
+            while (p < data.length && data[p] !== 0) p++; p++;       // translated keyword
+            if (compFlag === 0) body = new TextDecoder("utf-8").decode(data.subarray(p));
+          }
+          if (body) texts[key] = body;
+        }
+      }
+      if (type === "IEND") break;
+      off += 12 + len;
+    }
+    const raw = texts.workflow || texts.prompt;
+    if (!raw) throw new Error("No ComfyUI workflow metadata found in this PNG. (Was it generated by ComfyUI with metadata enabled?)");
+    return raw;
+  }
+
+  // ---- wiring ---------------------------------------------------------------
+  async function handleFile(file) {
+    try {
+      if (/\.png$/i.test(file.name) || file.type === "image/png") {
+        const buf = await file.arrayBuffer();
+        present(extractPngWorkflow(buf), file.name);
+      } else {
+        present(await file.text(), file.name);
+      }
+    } catch (e) { showError(e.message); }
+  }
+
+  const dz = $("dropzone");
+  dz.addEventListener("click", () => $("fileinput").click());
+  dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("drag"); });
+  dz.addEventListener("dragleave", () => dz.classList.remove("drag"));
+  dz.addEventListener("drop", e => {
+    e.preventDefault(); dz.classList.remove("drag");
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  $("fileinput").addEventListener("change", e => { if (e.target.files.length) handleFile(e.target.files[0]); });
+  $("parsebtn").addEventListener("click", () => {
+    const t = $("pastearea").value.trim();
+    if (!t) { showError("Paste some workflow JSON first."); return; }
+    present(t, null);
+  });
+  $("copybtn").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(currentMd); $("copybtn").textContent = "✓ Copied!"; }
+    catch { // clipboard API can fail on file:// — fallback
+      const ta = document.createElement("textarea"); ta.value = currentMd; document.body.appendChild(ta);
+      ta.select(); document.execCommand("copy"); ta.remove(); $("copybtn").textContent = "✓ Copied!";
+    }
+    setTimeout(() => $("copybtn").innerHTML = "&#128203; Copy Markdown", 1600);
+  });
+  $("dlbtn").addEventListener("click", () => {
+    const blob = new Blob([currentMd], { type: "text/markdown" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = currentName + "_docs.md";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  const SAMPLE = {
+    "1": { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: "sdxl_anime_model.safetensors" } },
+    "2": { class_type: "LoraLoader", inputs: { model: ["1", 0], clip: ["1", 1], lora_name: "detail_enhancer_xl.safetensors", strength_model: 0.7, strength_clip: 0.7 } },
+    "3": { class_type: "CLIPTextEncode", inputs: { clip: ["2", 1], text: "masterpiece, best quality, 1girl, silver hair, city night background, cinematic lighting" } },
+    "4": { class_type: "CLIPTextEncode", inputs: { clip: ["2", 1], text: "worst quality, low quality, blurry, bad anatomy, watermark" } },
+    "5": { class_type: "EmptyLatentImage", inputs: { width: 832, height: 1216, batch_size: 1 } },
+    "6": { class_type: "KSampler", inputs: { model: ["2", 0], positive: ["3", 0], negative: ["4", 0], latent_image: ["5", 0], seed: 123456789, steps: 28, cfg: 5.0, sampler_name: "euler_ancestral", scheduler: "normal", denoise: 1.0 } },
+    "7": { class_type: "VAEDecode", inputs: { samples: ["6", 0], vae: ["1", 2] } },
+    "8": { class_type: "SaveImage", inputs: { images: ["7", 0], filename_prefix: "sample_output" } }
+  };
+  $("samplebtn").addEventListener("click", () => present(JSON.stringify(SAMPLE), "sample_workflow.json"));
+})();
+</script>
+</body>
+</html>
