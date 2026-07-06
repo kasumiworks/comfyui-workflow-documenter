@@ -179,6 +179,12 @@ const WFDoc = (() => {
     "TorchCompileModel","LoadLatent","SaveLatent",
     "Note","MarkdownNote","PrimitiveNode","PrimitiveInt","PrimitiveFloat","PrimitiveString",
     "PrimitiveStringMultiline","PrimitiveBoolean","Reroute","GetImageSize",
+    "WanImageToVideo","WanFunControlToVideo","WanFunInpaintToVideo","WanFirstLastFrameToVideo",
+    "WanVaceToVideo","WanCameraImageToVideo","TrimVideoLatent",
+    "CLIPTextEncodeSD3","CLIPTextEncodeFlux","CLIPTextEncodeHunyuanDiT","CLIPTextEncodePixArtAlpha",
+    "LTXVImgToVideo","LTXVConditioning","LTXVScheduler","LTXVAddGuide","LTXVCropGuides",
+    "HunyuanImageToVideo","TextEncodeHunyuanVideo_ImageToVideo",
+    "CreateVideo","GetVideoComponents","SaveGLB",
     "DifferentialDiffusion","ThresholdMask","PorterDuffImageComposite","JoinImageWithAlpha",
     "SplitImageWithAlpha","SD_4XUpscale_Conditioning","PhotoMakerLoader","PhotoMakerEncode",
     "VideoLinearCFGGuidance","VideoTriangleCFGGuidance","SVD_img2vid_Conditioning",
@@ -206,6 +212,13 @@ const WFDoc = (() => {
     EmptySD3LatentImage: ["width","height","batch_size"],
     EmptyHunyuanLatentVideo: ["width","height","length","batch_size"],
     EmptyLTXVLatentVideo: ["width","height","length","batch_size"],
+    EmptyMochiLatentVideo: ["width","height","length","batch_size"],
+    WanImageToVideo: ["width","height","length","batch_size"],
+    LTXVImgToVideo: ["width","height","length","batch_size","strength"],
+    LTXVScheduler: ["steps","max_shift","base_shift","stretch","terminal"],
+    SaveVideo: ["filename_prefix","format","codec"],
+    SaveWEBM: ["filename_prefix","codec","fps","crf"],
+    CLIPTextEncodeSD3: ["clip_l","clip_g","t5xxl","empty_padding"],
     KSampler: ["seed","control_after_generate","steps","cfg","sampler_name","scheduler","denoise"],
     KSamplerAdvanced: ["add_noise","noise_seed","control_after_generate","steps","cfg",
                        "sampler_name","scheduler","start_at_step","end_at_step","return_with_leftover_noise"],
@@ -225,6 +238,52 @@ const WFDoc = (() => {
     Note: ["text"],
     MarkdownNote: ["text"]
   };
+
+  // identify well-known custom node packs even in API-format workflows (no cnr_id there)
+  const PACK_EXACT = {
+    UltimateSDUpscale: "ComfyUI_UltimateSDUpscale",
+    UltimateSDUpscaleNoUpscale: "ComfyUI_UltimateSDUpscale",
+    FaceDetailer: "ComfyUI-Impact-Pack",
+    FaceDetailerPipe: "ComfyUI-Impact-Pack",
+    SAMLoader: "ComfyUI-Impact-Pack",
+    DetailerForEach: "ComfyUI-Impact-Pack",
+    UltralyticsDetectorProvider: "ComfyUI-Impact-Subpack",
+    IPAdapter: "ComfyUI_IPAdapter_plus",
+    IPAdapterAdvanced: "ComfyUI_IPAdapter_plus",
+    IPAdapterUnifiedLoader: "ComfyUI_IPAdapter_plus",
+    IPAdapterFaceID: "ComfyUI_IPAdapter_plus",
+    ReActorFaceSwap: "comfyui-reactor-node",
+    DWPreprocessor: "comfyui_controlnet_aux",
+    AIO_Preprocessor: "comfyui_controlnet_aux",
+    OpenposePreprocessor: "comfyui_controlnet_aux",
+    LineArtPreprocessor: "comfyui_controlnet_aux",
+    DepthAnythingPreprocessor: "comfyui_controlnet_aux",
+    SUPIR_Upscale: "ComfyUI-SUPIR",
+    "RIFE VFI": "ComfyUI-Frame-Interpolation",
+    UnetLoaderGGUF: "ComfyUI-GGUF",
+    DualCLIPLoaderGGUF: "ComfyUI-GGUF",
+    CLIPLoaderGGUF: "ComfyUI-GGUF"
+  };
+  const PACK_PREFIX = [
+    [/^VHS_/, "ComfyUI-VideoHelperSuite"],
+    [/^ADE_/, "ComfyUI-AnimateDiff-Evolved"],
+    [/^Impact/, "ComfyUI-Impact-Pack"],
+    [/^CR\s/, "ComfyUI_Comfyroll_CustomNodes"],
+    [/^ttN\s?/, "ComfyUI_tinyterraNodes"],
+    [/^easy\s/, "ComfyUI-Easy-Use"],
+    [/\(rgthree\)$/, "rgthree-comfy"],
+    [/KJ$/, "ComfyUI-KJNodes"],
+    [/^(LayerUtility|LayerMask|LayerStyle|LayerFilter):/, "ComfyUI_LayerStyle"],
+    [/^WanVideo/, "ComfyUI-WanVideoWrapper"],
+    [/^Inspire/, "ComfyUI-Inspire-Pack"],
+    [/^SDXLPrompt/, "sdxl_prompt_styler"],
+    [/GGUF/i, "ComfyUI-GGUF"]
+  ];
+  function packHint(type) {
+    if (PACK_EXACT[type]) return PACK_EXACT[type];
+    for (const [re, pack] of PACK_PREFIX) if (re.test(type)) return pack;
+    return null;
+  }
 
   const ASSET_KEYS = {
     ckpt_name: "Checkpoint",
@@ -360,7 +419,7 @@ const WFDoc = (() => {
     const customTypes = {};
     for (const n of nodes) {
       if (isCustom(n)) {
-        const pack = n.pack || "(unrecognized — likely a custom node pack)";
+        const pack = n.pack || packHint(n.type) || "(unknown pack — search the node name in ComfyUI Manager)";
         (customTypes[pack] = customTypes[pack] || new Set()).add(n.type);
       }
     }
