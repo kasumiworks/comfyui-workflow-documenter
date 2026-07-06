@@ -84,6 +84,12 @@
     display: inline-block; border-radius: 999px; padding: 1px 10px; font-size: 0.75rem;
     border: 1px solid var(--border); margin-right: 6px;
   }
+  .mini {
+    padding: 2px 9px; font-size: 0.75rem; border-radius: 6px; line-height: 1.4;
+    display: inline-block; border: 1px solid var(--border); background: var(--panel2);
+    color: var(--text); text-decoration: none; cursor: pointer; vertical-align: middle;
+  }
+  .mini:hover { border-color: var(--accent); background: #58a6ff14; }
   .pill.good { color: var(--good); border-color: #2ea04366; background: #2ea04314; }
   .pill.warn { color: var(--warn); border-color: #d2992266; background: #d2992214; }
   .doc .pipeline {
@@ -713,14 +719,24 @@ if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
       H.push(`<p>✅ <strong>No custom nodes needed</strong> — runs on a clean ComfyUI install.</p>`);
     } else {
       H.push(`<p>Install these custom node packs (via ComfyUI Manager) before loading:</p><ul>`);
-      for (const p of a.customPacks)
-        H.push(`<li><strong>${esc(p.pack)}</strong> — <span class="mono">${p.types.map(esc).join(", ")}</span></li>`);
+      for (const p of a.customPacks) {
+        const findLink = p.pack.startsWith("(") ? "" :
+          ` <a class="mini" href="https://github.com/search?q=${encodeURIComponent(p.pack)}&type=repositories" target="_blank" rel="noopener" title="Find this pack's repo">🔍 find</a>`;
+        H.push(`<li><strong>${esc(p.pack)}</strong>${findLink} — <span class="mono">${p.types.map(esc).join(", ")}</span></li>`);
+      }
       H.push(`</ul>`);
     }
     if (a.assets.length) {
-      H.push(`<div class="scrollbox"><table><tr><th>Type</th><th>File</th><th>Notes</th><th>Used by</th></tr>`);
-      for (const x of a.assets)
-        H.push(`<tr><td>${esc(x.category)}</td><td class="mono">${esc(x.file)}</td><td>${esc(x.notes || "—")}</td><td>${esc(x.nodes)}</td></tr>`);
+      H.push(`<div class="scrollbox"><table><tr><th>Type</th><th>File</th><th>Notes</th><th>Used by</th><th>Get</th></tr>`);
+      for (const x of a.assets) {
+        const base = x.file.split(/[/\\]/).pop().replace(/\.(safetensors|ckpt|pt|pth|gguf|sft|onnx|bin)$/i, "");
+        const searchUrl = /Upscale/i.test(x.category)
+          ? `https://openmodeldb.info/?q=${encodeURIComponent(base)}`
+          : `https://civitai.com/search/models?query=${encodeURIComponent(base)}`;
+        H.push(`<tr><td>${esc(x.category)}</td><td class="mono">${esc(x.file)}</td><td>${esc(x.notes || "—")}</td><td>${esc(x.nodes)}</td>` +
+          `<td style="white-space:nowrap"><button class="mini copyfile" data-copy="${esc(x.file)}" title="Copy filename">📋 copy</button> ` +
+          `<a class="mini" href="${searchUrl}" target="_blank" rel="noopener" title="Search for this model">🔍 search</a></td></tr>`);
+      }
       H.push(`</table></div>`);
     }
 
@@ -835,6 +851,19 @@ if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
       }
     } catch (e) { showError(e.message); }
   }
+
+  // per-file copy buttons inside generated docs (event delegation — rows are re-rendered)
+  $("doc").addEventListener("click", async e => {
+    const b = e.target.closest(".copyfile");
+    if (!b) return;
+    try { await navigator.clipboard.writeText(b.dataset.copy); }
+    catch {
+      const ta = document.createElement("textarea"); ta.value = b.dataset.copy;
+      document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
+    }
+    const old = b.textContent; b.textContent = "✓ copied";
+    setTimeout(() => { b.textContent = old; }, 1200);
+  });
 
   const dz = $("dropzone");
   dz.addEventListener("click", () => $("fileinput").click());
