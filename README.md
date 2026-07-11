@@ -50,3 +50,5 @@ MIT. Do whatever you want with it.
 ---
 
 Made by [Kasumi Works](https://kasumiworks.gumroad.com) 🇯🇵
+
+Want ready-to-run workflows that ship with docs like these already written? → [ComfyUI Anime Workflow Pack Vol.1 — fully documented](https://kasumiworks.gumroad.com/l/comfyui-anime-workflow-pack)

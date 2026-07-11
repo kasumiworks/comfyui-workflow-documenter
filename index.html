@@ -891,6 +891,12 @@ if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
       H.push(`<tr><td>${esc(n.id)}</td><td>${esc(WFDoc.disp(n))}${WFDoc.isCustom(n) ? ' <span class="pill warn">custom</span>' : ""}</td><td class="mono">${esc(ws || "—")}</td></tr>`);
     }
     H.push(`</table></div>`);
+
+    // Static bridge to the paid pack — one line, no tracking, shown only after
+    // the reader has seen what the docs look like. Deep link, not the store root.
+    H.push(`<p class="sub" style="margin-top:16px">Docs like this ship with every workflow in my packs → ` +
+      `<a href="https://kasumiworks.gumroad.com/l/comfyui-anime-workflow-pack" target="_blank" rel="noopener">` +
+      `<strong>ComfyUI Anime Workflow Pack Vol.1 — fully documented</strong></a></p>`);
     return H.join("\n");
   }
 
