@@ -129,6 +129,7 @@
   <div id="results">
     <div class="toolbar">
       <button class="primary" id="copybtn">&#128203; Copy Markdown</button>
+      <button id="civbtn" title="Headers &amp; tables converted for Civitai's editor, prompts first">&#127912; Copy for Civitai</button>
       <button id="dlbtn">&#11015; Download .md</button>
       <span class="spacer"></span>
       <span class="fname" id="fname"></span>
@@ -677,6 +678,62 @@ const WFDoc = (() => {
     return L.join("\n");
   }
 
+  // Civitai flavor: their editor mangles # headings, and tables render
+  // differently in preview vs published — so this variant uses bold lines
+  // and bullet lists only. Prompts go first (that's what Civitai readers want),
+  // and the node reference table is omitted to keep it post-sized.
+  function toCivitai(a) {
+    const L = [];
+    const H = t => { L.push(`**${t}**`); L.push(""); };
+    L.push(`**${a.filename} — Workflow Documentation**`);
+    L.push("");
+    L.push(`_Auto-generated with ComfyUI Workflow Documenter (free, runs 100% in your browser) — a Kasumi Works tool._`);
+    L.push("");
+    if (a.prompts.positive.length || a.prompts.negative.length) {
+      H("Prompts");
+      a.prompts.positive.forEach((t, i) => {
+        L.push(`**Positive${a.prompts.positive.length > 1 ? " " + (i + 1) : ""}:**`);
+        L.push(fence(t)); L.push("");
+      });
+      a.prompts.negative.forEach((t, i) => {
+        L.push(`**Negative${a.prompts.negative.length > 1 ? " " + (i + 1) : ""}:**`);
+        L.push(fence(t)); L.push("");
+      });
+    }
+    if (a.assets.length) {
+      H("Model files");
+      for (const x of a.assets) L.push(`- ${x.category}: \`${x.file}\`${x.notes ? " — " + x.notes : ""}`);
+      L.push("");
+    }
+    const rows = settingsRows(a);
+    if (rows.length || a.samplers.length > 1) {
+      H("Generation settings");
+      for (const [k, v] of rows) L.push(`- ${k}: ${v}`);
+      if (a.samplers.length > 1) {
+        L.push("- Sampling passes:");
+        for (const s of a.samplers) {
+          const g = k => s.settings[k] !== undefined ? String(s.settings[k]) : "—";
+          L.push(`  - ${s.name}: ${g("steps")} steps, CFG ${g("cfg")}, ${g("sampler_name")}/${g("scheduler")}, denoise ${g("denoise")}`);
+        }
+      }
+      L.push("");
+    }
+    H("Custom node packs");
+    if (!a.customPacks.length) {
+      L.push("None — 100% ComfyUI core nodes, runs on a clean install.");
+    } else {
+      for (const p of a.customPacks) L.push(`- ${p.pack} (${p.types.join(", ")})`);
+    }
+    L.push("");
+    if (a.pipeline.length > 1) {
+      H("Pipeline");
+      L.push("`" + a.pipeline.join("` → `") + "`");
+      L.push("");
+    }
+    L.push("_Docs generated locally — nothing was uploaded anywhere._");
+    return L.join("\n");
+  }
+
   function parseAny(text, filename) {
     let j;
     try { j = JSON.parse(text); }
@@ -684,7 +741,7 @@ const WFDoc = (() => {
     return analyze(j, filename);
   }
 
-  return { analyze, toMarkdown, parseAny, isCustom, disp, settingsRows };
+  return { analyze, toMarkdown, toCivitai, parseAny, isCustom, disp, settingsRows };
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
 </script>
@@ -694,7 +751,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
 (() => {
   const $ = id => document.getElementById(id);
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  let currentMd = "", currentName = "workflow";
+  let currentMd = "", currentCiv = "", currentName = "workflow";
 
   function showError(msg) {
     const e = $("error"); e.textContent = "⚠ " + msg; e.style.display = "block";
@@ -713,6 +770,17 @@ if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
         ? `<span class="pill good">100% core nodes ✓</span>`
         : `<span class="pill warn">${a.counts.custom} custom node${a.counts.custom > 1 ? "s" : ""}</span>`) + `</p>`);
     if (a.outputInfo.length) H.push(`<p><strong>Output:</strong> ${esc(a.outputInfo.join("; "))}</p>`);
+
+    // Prompts first in the on-screen view (most-requested info when inspecting
+    // an image/workflow). The Markdown export keeps Requirements first — that
+    // one reads as a README for someone about to install.
+    if (a.prompts.positive.length || a.prompts.negative.length) {
+      H.push(`<h2>Prompts</h2>`);
+      a.prompts.positive.forEach((t, i) =>
+        H.push(`<p><strong>Positive${a.prompts.positive.length > 1 ? " " + (i + 1) : ""}</strong></p><pre>${esc(t)}</pre>`));
+      a.prompts.negative.forEach((t, i) =>
+        H.push(`<p><strong>Negative${a.prompts.negative.length > 1 ? " " + (i + 1) : ""}</strong></p><pre>${esc(t)}</pre>`));
+    }
 
     H.push(`<h2>Requirements</h2>`);
     if (!a.customPacks.length) {
@@ -758,14 +826,6 @@ if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
       }
     }
 
-    if (a.prompts.positive.length || a.prompts.negative.length) {
-      H.push(`<h2>Prompts</h2>`);
-      a.prompts.positive.forEach((t, i) =>
-        H.push(`<p><strong>Positive${a.prompts.positive.length > 1 ? " " + (i + 1) : ""}</strong></p><pre>${esc(t)}</pre>`));
-      a.prompts.negative.forEach((t, i) =>
-        H.push(`<p><strong>Negative${a.prompts.negative.length > 1 ? " " + (i + 1) : ""}</strong></p><pre>${esc(t)}</pre>`));
-    }
-
     if (a.pipeline.length > 1) {
       H.push(`<h2>Pipeline (main path)</h2>`);
       H.push(`<div class="pipeline">${a.pipeline.map(esc).join(` <span class="arrow">→</span> `)}</div>`);
@@ -795,6 +855,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
     try { a = WFDoc.parseAny(text, filename); }
     catch (e) { showError(e.message); return; }
     currentMd = WFDoc.toMarkdown(a);
+    currentCiv = WFDoc.toCivitai(a);
     currentName = (filename || "workflow").replace(/\.(json|png)$/i, "");
     $("doc").innerHTML = renderHTML(a);
     $("fname").textContent = filename || "(pasted JSON)";
@@ -886,6 +947,14 @@ if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
       ta.select(); document.execCommand("copy"); ta.remove(); $("copybtn").textContent = "✓ Copied!";
     }
     setTimeout(() => $("copybtn").innerHTML = "&#128203; Copy Markdown", 1600);
+  });
+  $("civbtn").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(currentCiv); $("civbtn").textContent = "✓ Copied!"; }
+    catch { // clipboard API can fail on file:// — fallback
+      const ta = document.createElement("textarea"); ta.value = currentCiv; document.body.appendChild(ta);
+      ta.select(); document.execCommand("copy"); ta.remove(); $("civbtn").textContent = "✓ Copied!";
+    }
+    setTimeout(() => $("civbtn").innerHTML = "&#127912; Copy for Civitai", 1600);
   });
   $("dlbtn").addEventListener("click", () => {
     const blob = new Blob([currentMd], { type: "text/markdown" });
