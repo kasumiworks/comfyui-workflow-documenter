@@ -131,6 +131,7 @@
       <button class="primary" id="copybtn">&#128203; Copy Markdown</button>
       <button id="civbtn" title="Headers &amp; tables converted for Civitai's editor, prompts first">&#127912; Copy for Civitai</button>
       <button id="dlbtn">&#11015; Download .md</button>
+      <button id="localbtn" title="Pick your top-level ComfyUI models folder (subfolders like checkpoints/loras/vae are scanned automatically). Read-only, runs entirely in your browser, nothing leaves your machine. Shows which files you already have — including fp8/fp16/quant variants.">&#128193; Check local models</button>
       <span class="spacer"></span>
       <span class="fname" id="fname"></span>
     </div>
@@ -734,6 +735,41 @@ const WFDoc = (() => {
     return L.join("\n");
   }
 
+  // ---- Local models folder cross-check ------------------------------------
+  // Pure matching logic (UI does the folder walking via File System Access API).
+  // "close" = same name once precision/quant tokens are stripped, so a workflow
+  // asking for blahblah.fp16.safetensors matches your blahblah.fp8.safetensors.
+  const MODEL_EXT = /\.(safetensors|ckpt|pt|pth|gguf|sft|onnx|bin)$/i;
+
+  function normStem(name) {
+    let s = String(name).split(/[\\/]/).pop().replace(MODEL_EXT, "").toLowerCase();
+    // strip precision/quant tokens BEFORE collapsing separators, so multi-part
+    // tokens like q3_k_m are still intact when the regex sees them
+    s = s.replace(/\b(fp16|fp8|fp32|bf16|f16|f32|e4m3fn|e5m2|int8|int4|nf4|q\d[a-z0-9_]*|gguf|scaled|pruned|ema(only)?)\b/g, "");
+    return s.replace(/[^a-z0-9]/g, "");
+  }
+
+  function matchLocalFiles(assets, localNames) {
+    const files = localNames.filter(n => MODEL_EXT.test(n));
+    const byExact = new Map(files.map(f => [f.split(/[\\/]/).pop().toLowerCase(), f]));
+    const byNorm = new Map();
+    for (const f of files) {
+      const k = normStem(f);
+      if (!k) continue;
+      if (!byNorm.has(k)) byNorm.set(k, []);
+      byNorm.get(k).push(f);
+    }
+    return assets.map(x => {
+      const want = x.file.split(/[\\/]/).pop();
+      const exact = byExact.get(want.toLowerCase());
+      if (exact) return { status: "exact", match: exact };
+      const k = normStem(want);
+      const close = k ? byNorm.get(k) : null;
+      if (close && close.length) return { status: "close", match: close[0] };
+      return { status: "missing" };
+    });
+  }
+
   function parseAny(text, filename) {
     let j;
     try { j = JSON.parse(text); }
@@ -741,7 +777,7 @@ const WFDoc = (() => {
     return analyze(j, filename);
   }
 
-  return { analyze, toMarkdown, toCivitai, parseAny, isCustom, disp, settingsRows };
+  return { analyze, toMarkdown, toCivitai, parseAny, isCustom, disp, settingsRows, normStem, matchLocalFiles };
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
 </script>
@@ -751,7 +787,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
 (() => {
   const $ = id => document.getElementById(id);
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  let currentMd = "", currentCiv = "", currentName = "workflow";
+  let currentMd = "", currentCiv = "", currentName = "workflow", currentA = null;
 
   function showError(msg) {
     const e = $("error"); e.textContent = "⚠ " + msg; e.style.display = "block";
@@ -795,17 +831,26 @@ if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
       H.push(`</ul>`);
     }
     if (a.assets.length) {
-      H.push(`<div class="scrollbox"><table><tr><th>Type</th><th>File</th><th>Notes</th><th>Used by</th><th>Get</th></tr>`);
-      for (const x of a.assets) {
+      const lm = a.localMatches;
+      H.push(`<div class="scrollbox"><table><tr><th>Type</th><th>File</th><th>Notes</th><th>Used by</th><th>Get</th>${lm ? "<th>Local</th>" : ""}</tr>`);
+      a.assets.forEach((x, i) => {
         const base = x.file.split(/[/\\]/).pop().replace(/\.(safetensors|ckpt|pt|pth|gguf|sft|onnx|bin)$/i, "");
         const searchUrl = /Upscale/i.test(x.category)
           ? `https://openmodeldb.info/?q=${encodeURIComponent(base)}`
           : `https://civitai.com/search/models?query=${encodeURIComponent(base)}`;
+        let localCell = "";
+        if (lm) {
+          const s = lm[i];
+          localCell = s.status === "exact" ? `<td><span class="pill good">✓ on disk</span></td>`
+            : s.status === "close" ? `<td><span class="pill warn" title="Different precision/quant variant found on disk">≈ ${esc(s.match.split(/[/\\]/).pop())}</span></td>`
+            : `<td>✕ missing</td>`;
+        }
         H.push(`<tr><td>${esc(x.category)}</td><td class="mono">${esc(x.file)}</td><td>${esc(x.notes || "—")}</td><td>${esc(x.nodes)}</td>` +
           `<td style="white-space:nowrap"><button class="mini copyfile" data-copy="${esc(x.file)}" title="Copy filename">📋 copy</button> ` +
-          `<a class="mini" href="${searchUrl}" target="_blank" rel="noopener" title="Search for this model">🔍 search</a></td></tr>`);
-      }
+          `<a class="mini" href="${searchUrl}" target="_blank" rel="noopener" title="Search for this model">🔍 search</a></td>${localCell}</tr>`);
+      });
       H.push(`</table></div>`);
+      if (lm) H.push(`<p class="sub">Local check ran entirely in your browser (read-only) — nothing was uploaded. Tip: pick your top-level <strong>models</strong> folder — subfolders (checkpoints, loras, vae, text_encoders…) are scanned automatically.</p>`);
     }
 
     const rows = WFDoc.settingsRows(a);
@@ -856,6 +901,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
     catch (e) { showError(e.message); return; }
     currentMd = WFDoc.toMarkdown(a);
     currentCiv = WFDoc.toCivitai(a);
+    currentA = a; // for local-folder cross-check re-render
     currentName = (filename || "workflow").replace(/\.(json|png)$/i, "");
     $("doc").innerHTML = renderHTML(a);
     $("fname").textContent = filename || "(pasted JSON)";
@@ -955,6 +1001,37 @@ if (typeof module !== "undefined" && module.exports) module.exports = WFDoc;
       ta.select(); document.execCommand("copy"); ta.remove(); $("civbtn").textContent = "✓ Copied!";
     }
     setTimeout(() => $("civbtn").innerHTML = "&#127912; Copy for Civitai", 1600);
+  });
+  // ---- Local models folder cross-check (File System Access API) ----------
+  async function walkDir(dirHandle, out, depth) {
+    if (depth > 6 || out.length > 60000) return;
+    for await (const [name, h] of dirHandle.entries()) {
+      if (h.kind === "file") out.push(name);
+      else if (h.kind === "directory") await walkDir(h, out, depth + 1);
+    }
+  }
+  if (!window.showDirectoryPicker) {
+    $("localbtn").style.display = "none"; // Firefox/Safari: API not available
+  }
+  $("localbtn").addEventListener("click", async () => {
+    if (!currentA) { $("localbtn").textContent = "Load a workflow first"; setTimeout(() => $("localbtn").innerHTML = "&#128193; Check local models", 2000); return; }
+    if (!currentA.assets.length) { $("localbtn").textContent = "No model files in this workflow"; setTimeout(() => $("localbtn").innerHTML = "&#128193; Check local models", 2000); return; }
+    try {
+      const dir = await window.showDirectoryPicker({ mode: "read" });
+      $("localbtn").textContent = "Scanning…";
+      const names = [];
+      await walkDir(dir, names, 0);
+      currentA.localMatches = WFDoc.matchLocalFiles(currentA.assets, names);
+      $("doc").innerHTML = renderHTML(currentA);
+      const c = s => currentA.localMatches.filter(m => m.status === s).length;
+      $("localbtn").textContent = `✓ ${c("exact")} on disk · ≈ ${c("close")} variant · ✕ ${c("missing")} missing`;
+      setTimeout(() => $("localbtn").innerHTML = "&#128193; Check local models", 6000);
+    } catch (e) {
+      if (e.name !== "AbortError") {
+        $("localbtn").textContent = "Scan failed";
+        setTimeout(() => $("localbtn").innerHTML = "&#128193; Check local models", 2500);
+      }
+    }
   });
   $("dlbtn").addEventListener("click", () => {
     const blob = new Blob([currentMd], { type: "text/markdown" });
